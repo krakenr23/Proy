@@ -10,6 +10,7 @@
 
 #include "mbr.h"
 #include "gpt.h"
+#include "APFS.h"
 
 char *mapFile(char *filePath) {
     /* Abre archivo */
@@ -69,6 +70,31 @@ int main()
    // Leer MBR
    MASTER_BOOT_RECORD mbr;
    memcpy(&mbr,base,sizeof(mbr)); // Aqui se puede hacer un cast directo, pero lo hago con memcpy para evitar warnings de alignment
+
+      // Leer encabezado GPT 
+   struct gpt_header gpt;
+   memcpy(&gpt, base + 512, sizeof(gpt));
+
+   // Leer la primera entrada de partición GPT
+   efi_partition_entry part;
+   memcpy(&part,
+          base + (gpt.partition_entry_lba * 512),
+          sizeof(part));
+
+   char  *s = base+part.start*512;
+
+   nx_superblock_t sb;
+
+   memcpy(&sb, s, sizeof(sb));
+
+   
+   if (sb.nx_magic != NX_MAGIC)
+   {
+         //Panico!!
+         mvprintw(7,5,"Que pasa!!");
+         mvprintw(8,5,"Magic leido: %08x", sb.nx_magic);
+   }
+
    desp_part(0,mbr.Partition);
 
    do {
