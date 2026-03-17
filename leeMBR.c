@@ -85,7 +85,7 @@ int main()
 
    nx_superblock_t sb;
 
-   memcpy(&sb, s, sizeof(sb));
+  memcpy(&sb1, s + (sb.nx_xp_desc_base + 1) * sb.nx_block_size, sizeof(sb));
 
    
    if (sb.nx_magic != NX_MAGIC)
