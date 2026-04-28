@@ -52,7 +52,18 @@ typedef struct {
     int   is_dir;
     off_t size;
     time_t mtime;
+    time_t btime;   /* fecha de creacion (st_birthtime en macOS/BSD, st_ctime como fallback en Linux) */
 } Entry;
+
+/* Devuelve la fecha de creacion del archivo si el sistema la expone;
+ * en Linux la mayoria de FS no la guardan, asi que caemos a st_ctime. */
+static time_t stat_btime(const struct stat *st) {
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
+    return st->st_birthtime;
+#else
+    return st->st_ctime;
+#endif
+}
 
 /* ─── Prototipos ──────────────────────────────────────────── */
 void navigator(const char *start_dir);
@@ -150,6 +161,7 @@ void navigator(const char *start_dir) {
             entries[n].is_dir = S_ISDIR(st.st_mode);
             entries[n].size   = st.st_size;
             entries[n].mtime  = st.st_mtime;
+            entries[n].btime  = stat_btime(&st);
             n++;
         }
         closedir(dp);
@@ -171,11 +183,26 @@ void navigator(const char *start_dir) {
         char right[32]; snprintf(right, sizeof(right), "%d entradas", n);
         draw_header(cwd, right);
 
-        /* Columnas */
+        /* Columnas: Nombre | Tamano | Fecha (creacion) | Modificacion.
+         * Si la terminal es estrecha, se omite Modificacion y luego Fecha. */
+        int show_mtime = cols >= 70;
+        int show_btime = cols >= 54;
+        int reserved   = 1 + 9 + 2;                 /* tamano + separadores */
+        if (show_btime) reserved += 16 + 2;
+        if (show_mtime) reserved += 16 + 2;
+        int nw = cols - reserved > 12 ? cols - reserved : 12;
+
         attron(COLOR_PAIR(COL_HEADER));
         mvhline(1, 0, ' ', cols);
-        int nw = cols - 30 > 12 ? cols - 30 : 12;
-        mvprintw(1, 1, "%-*s %9s  %-17s", nw, "Nombre", "Tamano", "Modificacion");
+        if (show_mtime)
+            mvprintw(1, 1, "%-*s %9s  %-16s  %-16s",
+                     nw, "Nombre", "Tamano", "Fecha", "Modificacion");
+        else if (show_btime)
+            mvprintw(1, 1, "%-*s %9s  %-16s",
+                     nw, "Nombre", "Tamano", "Fecha");
+        else
+            mvprintw(1, 1, "%-*s %9s",
+                     nw, "Nombre", "Tamano");
         attroff(COLOR_PAIR(COL_HEADER));
 
         for (int i = 0; i < list_rows && (i + off) < n; i++) {
@@ -186,9 +213,11 @@ void navigator(const char *start_dir) {
             if (e->is_dir) snprintf(sz, sizeof(sz), "     DIR");
             else           format_size(e->size, sz, sizeof(sz));
 
-            char ts[20];
-            struct tm *tm = localtime(&e->mtime);
-            strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M", tm);
+            char fecha[20] = "", modif[20] = "";
+            struct tm *tmb = localtime(&e->btime);
+            if (tmb) strftime(fecha, sizeof(fecha), "%Y-%m-%d %H:%M", tmb);
+            struct tm *tmm = localtime(&e->mtime);
+            if (tmm) strftime(modif, sizeof(modif), "%Y-%m-%d %H:%M", tmm);
 
             char nm[NAME_MAX + 3];
             snprintf(nm, sizeof(nm), "%s%s", e->is_dir ? "/" : " ", e->name);
@@ -198,7 +227,15 @@ void navigator(const char *start_dir) {
             else               attron(COLOR_PAIR(COL_FILE));
 
             mvhline(2 + i, 0, ' ', cols);
-            mvprintw(2 + i, 1, "%-*s %9s  %s", nw, nm, sz, ts);
+            if (show_mtime)
+                mvprintw(2 + i, 1, "%-*s %9s  %-16s  %-16s",
+                         nw, nm, sz, fecha, modif);
+            else if (show_btime)
+                mvprintw(2 + i, 1, "%-*s %9s  %-16s",
+                         nw, nm, sz, fecha);
+            else
+                mvprintw(2 + i, 1, "%-*s %9s",
+                         nw, nm, sz);
 
             if (idx == sel)    attroff(COLOR_PAIR(COL_SELECT) | A_BOLD);
             else if (e->is_dir) attroff(COLOR_PAIR(COL_DIR));

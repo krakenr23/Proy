@@ -59,6 +59,7 @@ typedef struct
     uint64_t file_id;
     uint8_t  tipo;
     uint64_t talla;
+    uint64_t btime;        // create_time del inodo (ns desde epoch)
 } DirEntry;
 
 typedef void (*fs_cb_t)(void *llave, uint32_t klen,
@@ -206,6 +207,17 @@ static void cb_talla(void *k, uint32_t kl, void *v, uint32_t vl, void *u)
     if (fin > t->talla) t->talla = fin;
 }
 
+typedef struct { uint64_t btime; } btimectx_t;
+
+static void cb_btime(void *k, uint32_t kl, void *v, uint32_t vl, void *u)
+{
+    (void)kl; (void)vl;
+    j_key_t *jk = k;
+    if (((jk->obj_id_and_type & OBJ_TYPE_MASK) >> OBJ_TYPE_SHIFT) != APFS_TYPE_INODE) return;
+    j_inode_val_t *iv = v;
+    ((btimectx_t *)u)->btime = iv->create_time;
+}
+
 /* ════════════════════════════════════════════════════════════
  *  UTILIDADES
  * ════════════════════════════════════════════════════════════ */
@@ -297,10 +309,14 @@ static void ui_directorio(ctx_t *c, int vol_idx, paddr_t vomap, paddr_t fs_root,
 
     for (int i = base; i < total; i++)
     {
-        if (ents[i].tipo != DT_REG) continue;
-        tallactx_t tc = { .talla = 0 };
-        lee_fs(c, fs_root, vomap, ents[i].file_id, cb_talla, &tc);
-        ents[i].talla = tc.talla;
+        if (ents[i].tipo == DT_REG) {
+            tallactx_t tc = { .talla = 0 };
+            lee_fs(c, fs_root, vomap, ents[i].file_id, cb_talla, &tc);
+            ents[i].talla = tc.talla;
+        }
+        btimectx_t bc = { .btime = 0 };
+        lee_fs(c, fs_root, vomap, ents[i].file_id, cb_btime, &bc);
+        ents[i].btime = bc.btime;
     }
 
     int sel = 0, off = 0;
@@ -317,10 +333,18 @@ static void ui_directorio(ctx_t *c, int vol_idx, paddr_t vomap, paddr_t fs_root,
                                total, (unsigned long long)dir_oid);
         draw_header(ruta, der);
 
+        /* Si la terminal es estrecha se omite la columna Fecha. */
+        int show_btime = cols >= 54;
+        int reserved   = 1 + 9 + 2;                     // tamano + separadores
+        if (show_btime) reserved += 16 + 2;
+        int nw = cols - reserved > 12 ? cols - reserved : 12;
+
         attron(COLOR_PAIR(COL_HEADER));
         mvhline(1, 0, ' ', cols);
-        int nw = cols - 14 > 12 ? cols - 14 : 12;
-        mvprintw(1, 1, "%-*s %9s", nw, "Nombre", "Tamano");
+        if (show_btime)
+            mvprintw(1, 1, "%-*s %9s  %-16s", nw, "Nombre", "Tamano", "Fecha");
+        else
+            mvprintw(1, 1, "%-*s %9s", nw, "Nombre", "Tamano");
         attroff(COLOR_PAIR(COL_HEADER));
 
         for (int i = 0; i < list_rows && (i + off) < total; i++)
@@ -332,12 +356,17 @@ static void ui_directorio(ctx_t *c, int vol_idx, paddr_t vomap, paddr_t fs_root,
             else                    format_size(e->talla, sz, sizeof(sz));
             char nm[300];
             snprintf(nm, sizeof(nm), "%s%s", e->tipo == DT_DIR ? "/" : " ", e->nombre);
+            char fecha[20] = "";
+            if (e->btime != 0) format_apfs_time(e->btime, fecha, sizeof(fecha));
 
             if (idx == sel)             attron(COLOR_PAIR(COL_SELECT) | A_BOLD);
             else if (e->tipo == DT_DIR) attron(COLOR_PAIR(COL_DIR));
             else                        attron(COLOR_PAIR(COL_FILE));
             mvhline(2 + i, 0, ' ', cols);
-            mvprintw(2 + i, 1, "%-*s %9s", nw, nm, sz);
+            if (show_btime)
+                mvprintw(2 + i, 1, "%-*s %9s  %-16s", nw, nm, sz, fecha);
+            else
+                mvprintw(2 + i, 1, "%-*s %9s", nw, nm, sz);
             if (idx == sel)             attroff(COLOR_PAIR(COL_SELECT) | A_BOLD);
             else if (e->tipo == DT_DIR) attroff(COLOR_PAIR(COL_DIR));
             else                        attroff(COLOR_PAIR(COL_FILE));
@@ -565,14 +594,11 @@ static void ui_disco(ctx_t *c)
         mvprintw(1, 2, "Revision GPT: 0x%08x   Entradas: %u   LBA tabla: %llu",
                  gpt.revision, gpt.npartition_entries,
                  (unsigned long long)gpt.partition_entry_lba);
-        mvprintw(2, 2, "LBA usable:   %llu — %llu",
-                 (unsigned long long)gpt.first_usable_lba,
-                 (unsigned long long)gpt.last_usable_lba);
 
         /* Tabla de particiones */
         attron(COLOR_PAIR(COL_HEADER));
-        mvhline(4, 0, ' ', cols);
-        mvprintw(4, 1, "%-3s %-36s %-12s %-12s %-10s",
+        mvhline(3, 0, ' ', cols);
+        mvprintw(3, 1, "%-3s %-36s %-12s %-12s %-10s",
                  "#", "GUID Tipo", "LBA inicio", "LBA fin", "Tamano");
         attroff(COLOR_PAIR(COL_HEADER));
 
@@ -585,8 +611,8 @@ static void ui_disco(ctx_t *c)
             if (i == sel)      attron(COLOR_PAIR(COL_SELECT) | A_BOLD);
             else if (p->es_apfs) attron(COLOR_PAIR(COL_DIR));
             else               attron(COLOR_PAIR(COL_FILE));
-            mvhline(5 + i, 0, ' ', cols);
-            mvprintw(5 + i, 1, "%-3d %-36s %-12llu %-12llu %-10s",
+            mvhline(4 + i, 0, ' ', cols);
+            mvprintw(4 + i, 1, "%-3d %-36s %-12llu %-12llu %-10s",
                      i, p->guid,
                      (unsigned long long)p->e.start,
                      (unsigned long long)p->e.end, sz);
