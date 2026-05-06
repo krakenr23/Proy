@@ -1,4 +1,4 @@
-/*
+/* Authors - Damian Munoz Diaz -- commented by claude
  * leeAPFS — Navegador APFS (disco → contenedor → volumen → directorios)
  * Sistemas Operativos
  *
@@ -96,7 +96,7 @@ static paddr_t lee_omap(ctx_t *c, paddr_t raiz, oid_t oid)
         return 0;
     }
 
-    // Interno: ultima rama con key.oid <= oid — sobretiro puro.
+    // arreglo por si me pase 
     int r = -1;
     for (uint32_t i = 0; i < n->btn_nkeys; i++)
     {
@@ -151,9 +151,7 @@ static void lee_fs(ctx_t *c, paddr_t raiz, paddr_t vomap,
     }
 }
 
-/* ════════════════════════════════════════════════════════════
- *  CALLBACKS DEL FS TREE
- * ════════════════════════════════════════════════════════════ */
+/*  CALLBACKS DEL FS TREe */
 
 typedef struct
 {
@@ -218,9 +216,7 @@ static void cb_btime(void *k, uint32_t kl, void *v, uint32_t vl, void *u)
     ((btimectx_t *)u)->btime = iv->create_time;
 }
 
-/* ════════════════════════════════════════════════════════════
- *  UTILIDADES
- * ════════════════════════════════════════════════════════════ */
+/*  UTILIDADES */
 
 static char *mapea(const char *ruta, long *fs)
 {
@@ -251,8 +247,6 @@ static void format_apfs_time(uint64_t ns, char *buf, size_t n)
     strftime(buf, n, "%Y-%m-%d %H:%M", t);
 }
 
-/* Formatea un GUID GPT (16 bytes) como XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX.
-   Los primeros tres grupos van en little-endian en disco; los ultimos dos en big-endian. */
 static void format_guid(const uint8_t *g, char *buf, size_t n)
 {
     snprintf(buf, n,
@@ -264,9 +258,7 @@ static void format_guid(const uint8_t *g, char *buf, size_t n)
              g[10], g[11], g[12], g[13], g[14], g[15]);
 }
 
-/* ════════════════════════════════════════════════════════════
- *  DECORADORES DE PANTALLA
- * ════════════════════════════════════════════════════════════ */
+/* DECORADORES DE screen */
 
 static void draw_header(const char *izq, const char *der)
 {
@@ -287,9 +279,7 @@ static void draw_status(const char *msg)
     attroff(COLOR_PAIR(COL_STATUS) | A_BOLD);
 }
 
-/* ════════════════════════════════════════════════════════════
- *  UI — DIRECTORIO
- * ════════════════════════════════════════════════════════════ */
+/* UI  */
 
 static void ui_directorio(ctx_t *c, int vol_idx, paddr_t vomap, paddr_t fs_root, int hash,
                           uint64_t dir_oid, uint64_t parent_oid, const char *ruta)
@@ -297,7 +287,7 @@ static void ui_directorio(ctx_t *c, int vol_idx, paddr_t vomap, paddr_t fs_root,
     DirEntry *ents = calloc(MAX_ENTRADAS, sizeof(DirEntry));
     if (!ents) return;
 
-    // ".." guarda el oid del padre — navegable, no solo cosmetico.
+    // ".." guarda el oid del padre 
     strcpy(ents[0].nombre, "..");
     ents[0].file_id = parent_oid;
     ents[0].tipo    = DT_DIR;
@@ -333,9 +323,9 @@ static void ui_directorio(ctx_t *c, int vol_idx, paddr_t vomap, paddr_t fs_root,
                                total, (unsigned long long)dir_oid);
         draw_header(ruta, der);
 
-        /* Si la terminal es estrecha se omite la columna Fecha. */
+
         int show_btime = cols >= 54;
-        int reserved   = 1 + 9 + 2;                     // tamano + separadores
+        int reserved   = 1 + 9 + 2;                     
         if (show_btime) reserved += 16 + 2;
         int nw = cols - reserved > 12 ? cols - reserved : 12;
 
@@ -402,8 +392,11 @@ static void ui_directorio(ctx_t *c, int vol_idx, paddr_t vomap, paddr_t fs_root,
                     def_prog_mode();
                     endwin();
                     char cmd[1024];
-                    snprintf(cmd, sizeof(cmd), "./leeArchivo %s %d %llu",
-                             c->ruta_disco, vol_idx, (unsigned long long)e->file_id);
+                    uint64_t part_lba = (uint64_t)(c->part - c->base) / SECTOR;
+                    snprintf(cmd, sizeof(cmd), "./leeArchivo %s %llu %d %llu",
+                             c->ruta_disco,
+                             (unsigned long long)part_lba,
+                             vol_idx, (unsigned long long)e->file_id);
                     int rc = system(cmd); (void)rc;
                     reset_prog_mode();
                     refresh();
@@ -417,10 +410,6 @@ static void ui_directorio(ctx_t *c, int vol_idx, paddr_t vomap, paddr_t fs_root,
         }
     }
 }
-
-/* ════════════════════════════════════════════════════════════
- *  UI — CONTENEDOR (NX superblock + volumenes)
- * ════════════════════════════════════════════════════════════ */
 
 static void ui_contenedor(ctx_t *c)
 {
@@ -456,7 +445,7 @@ static void ui_contenedor(ctx_t *c)
     }
 
     int sel = 0;
-    const int cab = 7;                                 // Altura de la cabecera informativa
+    const int cab = 7;                                 // Altura ddl headefr
 
     for (;;)
     {
@@ -535,10 +524,6 @@ static void ui_contenedor(ctx_t *c)
         }
     }
 }
-
-/* ════════════════════════════════════════════════════════════
- *  UI — DISCO (tabla GPT)
- * ════════════════════════════════════════════════════════════ */
 
 typedef struct
 {
@@ -651,9 +636,7 @@ static void ui_disco(ctx_t *c)
     }
 }
 
-/* ════════════════════════════════════════════════════════════
- *  MAIN
- * ════════════════════════════════════════════════════════════ */
+/*  MAIN */
 
 int main(int argc, char *argv[])
 {

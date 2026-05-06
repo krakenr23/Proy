@@ -3,8 +3,9 @@
  * Sistemas Operativos
  *
  * Compilar: make leeArchivo
- * Uso:      ./leeArchivo <disco.dmg> <vol_idx> <file_id>
+ * Uso:      ./leeArchivo <disco.dmg> <part_lba> <vol_idx> <file_id>
  *
+ * <part_lba> es el LBA donde arranca la particion APFS elegida en leeAPFS.
  * Camina el mismo camino que leeAPFS hasta el FS tree del volumen pedido,
  * junta los extents del file_id indicado en un archivo temporal y lanza
  * navvis para que el usuario los inspeccione en hex/texto.
@@ -163,33 +164,25 @@ static char *mapea(const char *ruta, long *fs)
     return m;
 }
 
-static void localiza_apfs(ctx_t *c)
-{
-    struct gpt_header gpt;
-    memcpy(&gpt, c->base + SECTOR, sizeof(gpt));
-    efi_partition_entry p;
-    memcpy(&p, c->base + gpt.partition_entry_lba * SECTOR, sizeof(p));
-    c->part = c->base + p.start * SECTOR;
-}
-
 /* ════════════════════════════════════════════════════════════
  *  MAIN
  * ════════════════════════════════════════════════════════════ */
 
 int main(int argc, char *argv[])
 {
-    if (argc < 4) {
-        fprintf(stderr, "Uso: %s <disco.dmg> <vol_idx> <file_id>\n", argv[0]);
+    if (argc < 5) {
+        fprintf(stderr, "Uso: %s <disco.dmg> <part_lba> <vol_idx> <file_id>\n", argv[0]);
         return 1;
     }
     const char *disco = argv[1];
-    int vidx = atoi(argv[2]);
-    uint64_t fid = strtoull(argv[3], NULL, 10);
+    uint64_t part_lba = strtoull(argv[2], NULL, 10);
+    int vidx = atoi(argv[3]);
+    uint64_t fid = strtoull(argv[4], NULL, 10);
 
     ctx_t c = {0};
     c.base = mapea(disco, &c.fs);
     if (!c.base) return 1;
-    localiza_apfs(&c);
+    c.part = c.base + part_lba * SECTOR;
 
     nx_superblock_t *nxsb = (nx_superblock_t *)c.part;
     if (nxsb->nx_magic != NX_MAGIC) { fprintf(stderr, "NXSB invalido\n"); return 1; }

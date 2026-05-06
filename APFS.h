@@ -3,12 +3,7 @@
 
 #include <stdint.h>
 
-// Tipos de Apple
-// https://developer.apple.com/support/downloads/Apple-File-System-Reference.pdf
-
-// Tipos de proposito general
-
-// Domicilio fisico de un bloque de disco
+// dir fisico de un bloque de disco
 typedef int64_t paddr_t;
 
 // Rango de direcciones

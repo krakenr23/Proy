@@ -12,11 +12,11 @@ leeAPFS: leeAPFS.c $(HEADERS_APFS)
 leeArchivo: leeArchivo.c $(HEADERS_APFS)
 	$(CC) $(CFLAGS) -o $@ leeArchivo.c
 
-# navvis se refiere a NAME_MAX — en macOS no lo expone <dirent.h>; lo inyectamos.
+
 navvis: navvis.c
 	$(CC) $(CFLAGS) -DNAME_MAX=255 -o $@ navvis.c $(LIBS)
 
-# El disco vive en el zip — descomprimirlo una sola vez.
+
 DiscoAPFS.dmg: DiscoAPFS.zip
 	unzip -o DiscoAPFS.zip
 
